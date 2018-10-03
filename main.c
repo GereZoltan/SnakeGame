@@ -1,314 +1,315 @@
-/*
- * main.c
- * Snake game on terminal
+/*! \file main.c
+ * \brief Snake game on terminal
+ *
+ * Simple snake implemented on linux terminal
+ * Includes a top list record in file for competition
  *
  * Written by Zoltan Gere
- *
+ * 1706228
+ * 02.10.2018
  */
 
+//#define DEBUG
+
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <unistd.h>
-#include <termios.h>
-#include <time.h>
+#include <stdlib.h> // for random number
+#include <string.h> // memory operations
+#include <sys/ioctl.h> // for ioctl
+#include <unistd.h> // for ioctl and read
+#include <termios.h> // for reading and writing terminal parameters
+#include <time.h> // for timing functions
+#include "snake.h"
 
-#define BOARDSIZEX 20
-#define BOARDSIZEY 14
+/*! \struct entry
+ *  \brief Contains 1 entry for top list
+ *
+ * \var char name[40] Name of the player
+ * \var int score The score the player has achieved
+ */
+struct entry {
+    char name[40];
+    int score;
+};
 
-typedef struct coord_t {
-    int x;
-    int y;
-} coord;
+/*! \fn void sortToplist(struct entry *toplist, size_t num)
+ * \brief Sort the top list entries on scores descending order
+ *
+ * Receive a pointer to the top list array and the number of elements.
+ * Sort the array by score values descending order, highest score is first entry
+ *
+ * \param toplist Pointer to array with entries
+ * \param num Number of entries in array
+ * \return void No values returned
+ */
+void sortToplist(struct entry *toplist, size_t num);
 
+void sortToplist(struct entry *toplist, size_t num) {
+    /*! \var size_t i, j
+     *  \brief Loop index variables
+     */
+    size_t i, j;
+    /*! \var size_t largest
+     *  \brief Index of the largest entry
+     */
+    size_t largest;
+    /*! \var struct entry temp
+     *  \brief Helper for swapping 2 entries
+     */
+    struct entry temp;
 
-int main(int argc, char **argv) {
-
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-
-    printf ("Lines: %d\n", w.ws_row);
-    printf ("Columns: %d\n", w.ws_col);
-
- 
-
-
-    struct termios cooked, raw;
-
-    // Get the state of the tty
-    (void) tcgetattr(0, &cooked);
-    // Make a copy we can mess with
-    (void) memcpy(&raw, &cooked, sizeof(struct termios));
-    // Turn off echoing, linebuffering, and special-character processing,
-    // but not the SIGINT or SIGQUIT keys.
-    raw.c_lflag &= ~ (ICANON | ECHO);
-    raw.c_cc[VMIN] = 0;                 // If no data availale READ returns 0.
-    raw.c_cc[VTIME] = 0;
-    // Ship the raw control blts
-    (void) tcsetattr(0, TCSANOW, &raw);
-
-    unsigned char c[3];
-    int gameRun = 1;
-    unsigned char upKey[3] = {27,91,65};
-    unsigned char downKey[3] = {27,91,66};
-    unsigned char leftKey[3] = {27,91,68};
-    unsigned char rightKey[3] = {27,91,67};
-    unsigned char escKey[3] = {27,0,0};
-
-    int score = 0;
-    unsigned char runningDirection = 'l';           // u, d, l, r
-    unsigned char input = 'l';
-    unsigned char board[BOARDSIZEX][BOARDSIZEY];
-    coord snake[BOARDSIZEX * BOARDSIZEY];
-    size_t head = 0;
-    size_t tail = 0;
-
-    coord apple;
-    int appleCount = 0;
-    int foundApplePosition = 0;
-
-    size_t snakeCurrentLength = 1;
-    size_t snakeSupposedLength = 4;
-
-    clock_t previousTime = clock();
-    clock_t currentTime = clock();
-
-    int i, j;
-
-    for (i = 0; i< BOARDSIZEY; i++) {
-        for (j = 0; j < BOARDSIZEX; j++) {
-            board[j][i] = ' ';
+    for (i = 0; i < num-1; i++) {               // Loop through sorted section
+        largest = i;                            // Suppose sorted section member is in position
+        for (j = i+1; j < num; j++) {           // Loop through unsorted section
+            if ((toplist+j)->score > (toplist+largest)->score) { // If member in unsorted section larger
+                largest = j;                    // Remember its index
+            }
+        }
+        if (largest != i) {                     // If largest entry is not in sorted section...
+            memcpy(temp.name, (toplist+i)->name, sizeof((toplist+i)->name));    // ...swap it with the entry...
+            temp.score = (toplist+i)->score;                                    // ...in unsorted section.
+            memcpy((toplist+i)->name, (toplist+largest)->name, sizeof((toplist+largest)->name)); // Both the name and the score...
+            (toplist+i)->score = (toplist+largest)->score;                      // ...must be swapped.
+            memcpy((toplist+largest)->name, temp.name, sizeof(temp.name));
+            (toplist+largest)->score = temp.score;
         }
     }
+    /*
+    printf("    Toplist after sort\n");                                         // DEBUG: Print the toplist
+        for (i = 0; i < 10; i++) {
+            printf("%4ld %30s %6d\n", i+1, (toplist+i)->name, (toplist+i)->score);
+        }
+        */
+}
 
-    for (i = 0; i< BOARDSIZEX * BOARDSIZEY; i++) {
-        snake[i].x = 0;
-        snake[i].y = 0;
+/*! \fn main(int argc, char **argv)
+ * \brief The main entry point of the program
+ *
+ * Declares and initialize all used variables
+ * Reads terminal window size
+ * Configures terminal environment for interactive use, disables waiting for keyboard entry
+ * Starts the main event loop
+ * Runs the snake game
+ * When main loop ended, processses the top list file
+ * Add player name and score if player earned sufficient point to enter Top 10
+ * Finally present the toplist
+ *
+ * \param argc Number of parameters
+ * \param argv Pointer pointing to array of parameters
+ * \return int Exit code
+ */
+int main(int argc, char **argv) {
+
+    /*! \var clock_t previousTime
+     *  \brief Time of the beginning of interval
+     */
+    clock_t previousTime = clock();
+    /*! \var clock_t currentTime
+     *  \brief Time of the end of interval
+     */
+    clock_t currentTime;
+    /*! \var size_t i
+     *  \brief Loop index variable
+     */
+    size_t i;
+    /*! \var unsigned char input
+     *  \brief Input character after processing
+     */
+    unsigned char input;
+    /*! \var int gameRun
+     *  \brief True while the game runs, when player lose it is set to false
+     */
+    int gameRun = 1;
+    /*! \var int score
+     *  \brief Score achieved by player
+     */
+    int score = 0;
+
+#ifdef DEBUG
+    score = 0;
+#endif
+
+    /*! \var unsigned char board
+     *  \brief The game board
+     *
+     *  Snake is rendered into the board
+     */
+    unsigned char board[BOARDSIZEX][BOARDSIZEY];
+    /*! \var snake player
+     *  \brief The players snake
+     */
+    snake player;
+    /*! \var int appleCount
+     *  \brief Number of apples currently on board
+     *
+     *  Count is always keept at 1
+     */
+    int appleCount = 0;
+    /*! \var coord apple
+     *  \brief Coordinate of the apple
+     */
+    coord apple;
+    /*! \var FILE * datafile
+     *  \brief Pointer to file containing the Top 10 list
+     */
+    FILE * datafile;
+    /*! \var char name[40]
+     *  \brief Players name input
+     */
+    char name[40];
+    /*! \var struct entry toplist[10]
+     *  \brief Top 10 list read from file / written to file
+     */
+    struct entry toplist[10];
+    /*! \var struct termios cooked, raw
+     *  \brief Contains the state of terminal
+     *
+     *  cooked is the original condition, restored after the game
+     *  raw is the altered condition suitable for game
+     */
+    struct termios cooked, raw;
+    /*! \var struct winsize w
+     *  \brief Struct containing the terminal window size
+     *
+     *  The actual window size is required for proper rendering
+     */
+    struct winsize windowSize;
+
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &windowSize);       // Query the terminal window size
+
+#ifdef DEBUG
+    printf ("Lines: %d\n", w.ws_row);
+    printf ("Columns: %d\n", w.ws_col);
+#endif
+
+    (void) tcgetattr(0, &cooked);               // Get the state of the terminal
+    (void) memcpy(&raw, &cooked, sizeof(struct termios));       // Make a copy of it
+    raw.c_lflag &= ~ (ICANON | ECHO);           // Turn off echoing, linebuffering, and special-character processing
+    raw.c_cc[VMIN] = 0;                         // No waiting time for input, so program is not stopped
+    raw.c_cc[VTIME] = 0;                        // If no data availale READ returns 0
+    (void) tcsetattr(0, TCSANOW, &raw);         // Write back the changed state
+
+
+    clearBoard(board, BOARDSIZEX, BOARDSIZEY);  // Clear game board
+
+    for (i = 0; i< BOARDSIZEX * BOARDSIZEY; i++) {      // Clear snake data.
+        player.position[i].x = 0;
+        player.position[i].y = 0;
     };
-    snake[0].x = BOARDSIZEX / 2;
-    snake[0].y = BOARDSIZEY / 2;
+    player.head = 0;
+    player.tail = 0;
+    player.position[player.head].x = BOARDSIZEX / 2;    // Positon snake at the center of the board
+    player.position[player.head].y = BOARDSIZEY / 2;
 
-    srand (time(NULL));
+    player.snakeCurrentLength = 1;                      // Initial snake length
+    player.snakeSupposedLength = 4;                     // The snake "flows in"
+    player.runningDirection = 'l';                      // Snake runs to the left
 
-    // main event loop
-    while (gameRun) {
-        // Read user input
-        memset(c, 0, sizeof(c));        // Clear buffer
+    srand (time(NULL));                                 // Init random number generator
 
-        if (read(0, &c, 3) != 0) {      // If input read
-            //printf("You pressed: ");
-            if (memcmp(c, upKey, 3) == 0) {
-                //printf("up\n");
-                input = 'u';
-            } else if (memcmp(c, downKey, 3) == 0) {
-                //printf("down\n");
-                input = 'd';
-            } else if (memcmp(c, leftKey, 3) == 0) {
-                //printf("left\n");
-                input = 'l';
-            } else if (memcmp(c, rightKey, 3) == 0) {
-                //printf("right\n");
-                input = 'r';
-            } else if (memcmp(c, escKey, 3) == 0) {
+    while (gameRun) {                                   // main event loop starts here
+        input = readInput();                            // Read user input
+        if (input == 27) {                              // Game stops when ESC key pressed
                 gameRun = 0;
-            }
-            
         }
 
-        // update snake direction according to input
-        if ((input == 'u') || (input == 'd')) {
-            if ((runningDirection == 'l') || (runningDirection == 'r')) {
-                runningDirection = input;
-            }
-        } else if ((input == 'l') || (input == 'r')) {
-            if ((runningDirection == 'u') || (runningDirection == 'd')) {
-                runningDirection = input;
-            }
+#ifdef DEBUG
+        if (input == ' ') {                             // In debug mode it is possible to pause the game
+            do {
+                input = readInput();
+            } while (input != ' ');
+            input = readInput();
         }
+#endif
 
-        // timed part, runs only 2x / second
+        updateSnakeDirection(&player, input);           // update snake direction according to input
+
         currentTime = clock();
-        if ((currentTime - previousTime) > (CLOCKS_PER_SEC / 2) ) {
+        if ((currentTime - previousTime) > (CLOCKS_PER_SEC / 6) ) {     // timed part, runs only n times / second
             previousTime = currentTime;
 
-            // update snake position
-            if (head < BOARDSIZEX * BOARDSIZEY - 1) {
-                switch (runningDirection) {
-                    case 'u':
-                        snake[head+1].x = snake[head].x;
-                        snake[head+1].y = snake[head].y-1;
-                        head++;
-                        break;
-                    case 'd':
-                        snake[head+1].x = snake[head].x;
-                        snake[head+1].y = snake[head].y+1;
-                        head++;
-                        break;
-                    case 'l':
-                        snake[head+1].x = snake[head].x-1;
-                        snake[head+1].y = snake[head].y;
-                        head++;
-                        break;
-                    case 'r':
-                        snake[head+1].x = snake[head].x+1;
-                        snake[head+1].y = snake[head].y;
-                        head++;
-                        break;
-                }
-            }
-            if (head == BOARDSIZEX * BOARDSIZEY - 1) {
-                switch (runningDirection) {
-                    case 'u':
-                        snake[0].x = snake[head].x;
-                        snake[0].y = snake[head].y-1;
-                        head = 0;
-                        break;
-                    case 'd':
-                        snake[0].x = snake[head].x;
-                        snake[0].y = snake[head].y+1;
-                        head = 0;
-                        break;
-                    case 'l':
-                        snake[0].x = snake[head].x-1;
-                        snake[0].y = snake[head].y;
-                        head = 0;
-                        break;
-                    case 'r':
-                        snake[0].x = snake[head].x+1;
-                        snake[0].y = snake[head].y;
-                        head = 0;
-                        break;
-                }
-            }
+            updateSnake(&player);                       // update snake position and length
 
-            // update snake length
-            snakeCurrentLength++;
-            if (snakeCurrentLength > snakeSupposedLength) {
-                tail++;
-                if (tail == BOARDSIZEX * BOARDSIZEY) {
-                    tail = 0;
-                }
-                snakeCurrentLength--;
-            }
-            
             // check snake collision
-            if (board[snake[head].x][snake[head].y] == 'o') {
+            if (board[player.position[player.head].x][player.position[player.head].y] == 'o') {     // Snake hits itself
                 // game over
                 gameRun = 0;
             }
-            if ((snake[head].x < 0) || (snake[head].x == BOARDSIZEX)) {
+            if ((player.position[player.head].x < 0) || (player.position[player.head].x == BOARDSIZEX)) {   // Snake hits vetical wall
                 // game over
                 gameRun = 0;
             }
-            if ((snake[head].y < 0) || (snake[head].y == BOARDSIZEY)) {
+            if ((player.position[player.head].y < 0) || (player.position[player.head].y == BOARDSIZEY)) {   // Snake hits hoizontal wall
                 // game over
                 gameRun = 0;
             }
-            if (board[snake[head].x][snake[head].y] == 'b') {
-                // eate apple
+            if (board[player.position[player.head].x][player.position[player.head].y] == 'b') {             // Snake eats apple
+                // ate apple
                 score += 10;
                 appleCount = 0;
-                snakeSupposedLength++;
+                player.snakeSupposedLength++;
             }
 
-            // if no apple, find position for apple
-            if (appleCount == 0) {
-                foundApplePosition = 0;
-                while (foundApplePosition == 0) {
-                    apple.x = rand() % BOARDSIZEX;
-                    apple.y = rand() % BOARDSIZEY;
-                    foundApplePosition = 1;
-
-                    if (head >= tail) {
-                        for (i = tail; i <= head; i++) {
-                            if ((snake[i].x == apple.x) && (snake[i].y == apple.y)) {
-                                foundApplePosition = 0;
-                            }
-                        }
-                    } else {
-                        for (i = tail; i < BOARDSIZEX * BOARDSIZEY; i++) {
-                            if ((snake[i].x == apple.x) && (snake[i].y == apple.y)) {
-                                foundApplePosition = 0;
-                            }
-                        }
-                        for (i = 0; i <= head; i++) {
-                            if ((snake[i].x == apple.x) && (snake[i].y == apple.y)) {
-                                foundApplePosition = 0;
-                            }
-                        }
-                    }
-                }
-                appleCount = 1;
-            }
-
-            // clear board
-            for (i = 0; i< BOARDSIZEY; i++) {
-                for (j = 0; j < BOARDSIZEX; j++) {
-                    board[j][i] = ' ';
-                }
-            }
-            
-            // put snake and apple on board
-            if (appleCount == 1) {
-                board[apple.x][apple.y] = 'b';
-            }
-
-            if (head >= tail) {
-                for (i = tail; i <= head; i++) {
-                    board[snake[i].x][snake[i].y] = 'o';
-                }
-            } else {
-                for (i = tail; i < BOARDSIZEX * BOARDSIZEY; i++) {
-                    board[snake[i].x][snake[i].y] = 'o';
-                }
-                for (i = 0; i <= head; i++) {
-                    board[snake[i].x][snake[i].y] = 'o';
+            if (appleCount == 0) {                                  // if no apple, find position for apple
+                appleCount = placeApple(&apple, &player);
+                if (appleCount == 0) {                              // no more apple possible...
+                    gameRun = 0;                                    // ..so the game ends
                 }
             }
 
-            // draw board
-            printf ("    Your score: %d\n", score);
-            for (j = 0; j < BOARDSIZEX + 2; j++) {
-                printf ("H");
-            }
+            updateBoard(board, &apple, &player, appleCount);        // update board
+
+            drawScreen(board, score, windowSize.ws_row);                     // draw board
+
+#ifdef DEBUG
+            // DEBUG: print some variable values
+            printf ("SnakeCurrentLength: %ld SnakeSupposedLength: %ld Head: %ld Tail: %ld Time: %ld Input %c", player.snakeCurrentLength, player.snakeSupposedLength, player.head, player.tail,  currentTime, input);
+#endif
             printf("\n");
-
-            for (i = 0; i< BOARDSIZEY; i++) {
-                printf ("H");
-                
-                    
-                for (j = 0; j < BOARDSIZEX; j++) {
-                    printf ("%c", board[j][i]);
-                }
-                
-                
-                printf ("H\n");
-            }
-
-            for (j = 0; j < BOARDSIZEX + 2; j++) {
-                printf ("H");
-            }
-            printf("\n");
-
-            printf ("\n    Use arrow keys to turn snake. Press ESC to quit game.\n");
-            printf ("SnakeCurrentLength: %ld SnakeSupposedLength: %ld Head: %ld Tail: %ld Time: %ld Input %c\n", snakeCurrentLength, snakeSupposedLength, head, tail,  currentTime, input);
-            for (i = BOARDSIZEY + 7; i< w.ws_row; i++) {
-                printf("\n");
-            }
-
-            //(void) fflush(stdout);
-
         } // timed part ends
 
-        //(void) fflush(stdout);
     } // main event loop ends
 
-    printf("GAME OVER!\n");
-    printf("Your score is: %d\n", score);
+    (void) tcsetattr(0, TCSANOW, &cooked);                          // Restore the original cooked state of terminal
 
-    // Restore the cooked state
-    (void) tcsetattr(0, TCSANOW, &cooked);
+    printf("\n\nGAME OVER!\n\n");
+    printf("Your final score is: %d\n", score);
+
+    for (i = 0; i < 10; i++) {                                      // Empty Top 10 list
+        memset(toplist[i].name, 0, sizeof(toplist[i].name));
+        toplist[i].score = 0;
+    }
+
+    datafile = fopen("snakegame.dat", "ab+");                       // Open data file, if it is not exist, it is created
+    if (datafile != NULL) {
+        rewind(datafile);                                           // Go to the beginning
+
+        fread(toplist, sizeof(toplist[0]), 10, datafile);           // Read in the top list
+        fclose(datafile);                                           // ...and close
+
+        if (toplist[9].score < score) {                             // Player earned a place on top list
+            printf("You earned a place on the top list! Enter your name: ");
+            fgets(name, sizeof(name)-1, stdin);                     // Ask for players name
+            name[strlen(name)-1] = '\0';
+            printf("\n");
+
+            memcpy(toplist[9].name, name, sizeof(name));            // Put player at the last poition
+            toplist[9].score = score;
+
+            sortToplist(toplist, 10);                               // Sort the list
+
+            datafile = fopen("snakegame.dat", "wb");                // Write the top list back to file
+            if (datafile != NULL) {
+                fwrite(toplist, sizeof(toplist[0]), 10, datafile);
+                fclose(datafile);
+            }
+        }
+
+        printf("    Hall of fame\n");                               // print top list
+        for (i = 0; i < 10; i++) {
+            printf("%4ld %30s %6d\n", i+1, toplist[i].name, toplist[i].score);
+        }
+        printf("\n");
+    }
 
     return 0;
 } // main function ends

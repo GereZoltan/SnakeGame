@@ -11,6 +11,7 @@
                 "-g",
                 "-o",
                 "${fileBasenameNoExtension}",
+                "snake.c",
                 "${relativeFile}"
             ],
             "group": {

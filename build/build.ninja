@@ -52,6 +52,11 @@ build CMakeFiles/SnakeGame.dir/main.c.o: C_COMPILER__SnakeGame ../main.c || cmak
   FLAGS = -g   -std=gnu99
   OBJECT_DIR = CMakeFiles/SnakeGame.dir
   OBJECT_FILE_DIR = CMakeFiles/SnakeGame.dir
+build CMakeFiles/SnakeGame.dir/snake.c.o: C_COMPILER__SnakeGame ../snake.c || cmake_object_order_depends_target_SnakeGame
+  DEP_FILE = CMakeFiles/SnakeGame.dir/snake.c.o.d
+  FLAGS = -g   -std=gnu99
+  OBJECT_DIR = CMakeFiles/SnakeGame.dir
+  OBJECT_FILE_DIR = CMakeFiles/SnakeGame.dir
 
 # =============================================================================
 # Link build statements for EXECUTABLE target SnakeGame
@@ -60,7 +65,7 @@ build CMakeFiles/SnakeGame.dir/main.c.o: C_COMPILER__SnakeGame ../main.c || cmak
 #############################################
 # Link the executable SnakeGame
 
-build SnakeGame: C_EXECUTABLE_LINKER__SnakeGame CMakeFiles/SnakeGame.dir/main.c.o
+build SnakeGame: C_EXECUTABLE_LINKER__SnakeGame CMakeFiles/SnakeGame.dir/main.c.o CMakeFiles/SnakeGame.dir/snake.c.o
   FLAGS = -g
   OBJECT_DIR = CMakeFiles/SnakeGame.dir
   POST_BUILD = :
