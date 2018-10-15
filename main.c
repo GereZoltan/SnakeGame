@@ -172,9 +172,9 @@ int main(int argc, char **argv) {
      *
      *  The actual window size is required for proper rendering
      */
-    struct winsize windowSize;
+    struct winsize w;
 
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &windowSize);       // Query the terminal window size
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);       // Query the terminal window size
 
 #ifdef DEBUG
     printf ("Lines: %d\n", w.ws_row);
@@ -258,7 +258,7 @@ int main(int argc, char **argv) {
 
             updateBoard(board, &apple, &player, appleCount);        // update board
 
-            drawScreen(board, score, windowSize.ws_row);                     // draw board
+            drawScreen(board, score, w.ws_row);                     // draw board
 
 #ifdef DEBUG
             // DEBUG: print some variable values
